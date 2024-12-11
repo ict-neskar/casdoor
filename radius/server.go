@@ -61,15 +61,29 @@ func handlerRadius(w radius.ResponseWriter, r *radius.Request) {
 }
 
 func handleAccessRequest(w radius.ResponseWriter, r *radius.Request) {
+	isProd := false
+	defaultOrganization := conf.GetConfigString("radiusDefaultOrganization")
 	username := rfc2865.UserName_GetString(r.Packet)
 	password := rfc2865.UserPassword_GetString(r.Packet)
 	organization := rfc2865.Class_GetString(r.Packet)
 	state := rfc2865.State_GetString(r.Packet)
 	log.Printf("handleAccessRequest() username=%v, org=%v, password=%v", username, organization, password)
 
-	if organization == "" {
+	if conf.GetConfigString("runmode") == "prod" {
+		isProd = true
+	}
+
+	if organization == "" && defaultOrganization == "" {
+		if !isProd {
+			log.Printf("handleAccessRequest() organization is empty")
+		}
+
 		w.Write(r.Response(radius.CodeAccessReject))
 		return
+	} else {
+		if organization == "" {
+			organization = defaultOrganization
+		}
 	}
 
 	var user *object.User
@@ -82,6 +96,9 @@ func handleAccessRequest(w radius.ResponseWriter, r *radius.Request) {
 	}
 
 	if err != nil {
+		if !isProd {
+			log.Printf("handleAccessRequest() err = %v", err)
+		}
 		w.Write(r.Response(radius.CodeAccessReject))
 		return
 	}
