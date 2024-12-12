@@ -114,6 +114,10 @@ func handleAccessRequest(w radius.ResponseWriter, r *radius.Request) {
 	isUserAllowed := len(allowedGroup) == 0
 
 	if len(allowedGroup) > 0 {
+		if !isProd {
+			log.Printf("handleAccessRequest() username=%v, org=%v, userGroups=%v", username, organization, user.Groups)	
+		}
+
 		userGroupSet := make(map[string]struct{}, len(user.Groups))
 		for _, group := range user.Groups {
 			userGroupSet[group] = struct{}{}
