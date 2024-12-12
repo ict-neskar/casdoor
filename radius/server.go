@@ -62,7 +62,9 @@ func handlerRadius(w radius.ResponseWriter, r *radius.Request) {
 
 func handleAccessRequest(w radius.ResponseWriter, r *radius.Request) {
 	isProd := false
+	var allowedGroup []string
 	defaultOrganization := conf.GetConfigString("radiusDefaultOrganization")
+	allowedGroupRaw := conf.GetConfigString("radiusAllowedGroups")
 	username := rfc2865.UserName_GetString(r.Packet)
 	password := rfc2865.UserPassword_GetString(r.Packet)
 	organization := rfc2865.Class_GetString(r.Packet)
@@ -71,6 +73,12 @@ func handleAccessRequest(w radius.ResponseWriter, r *radius.Request) {
 
 	if conf.GetConfigString("runmode") == "prod" {
 		isProd = true
+	}
+
+	if allowedGroupRaw != "" {
+		for _, group := range strings.Split(allowedGroupRaw, ",") {
+			allowedGroup = append(allowedGroup, strings.TrimSpace(group))
+		}
 	}
 
 	if organization == "" && defaultOrganization == "" {
@@ -98,6 +106,30 @@ func handleAccessRequest(w radius.ResponseWriter, r *radius.Request) {
 	if err != nil {
 		if !isProd {
 			log.Printf("handleAccessRequest() err = %v", err)
+		}
+		w.Write(r.Response(radius.CodeAccessReject))
+		return
+	}
+
+	isUserAllowed := len(allowedGroup) == 0
+
+	if len(allowedGroup) > 0 {
+		userGroupSet := make(map[string]struct{}, len(user.Groups))
+		for _, group := range user.Groups {
+			userGroupSet[group] = struct{}{}
+		}
+
+		for _, allowedGroup := range allowedGroup {
+			if _, ok := userGroupSet[allowedGroup]; ok {
+				isUserAllowed = true
+				break
+			}
+		}
+	}
+
+	if !isUserAllowed {
+		if !isProd {
+			log.Printf("handleAccessRequest() username=%v, org=%v doesn't have %s group", username, organization, strings.Join(allowedGroup, ", "))
 		}
 		w.Write(r.Response(radius.CodeAccessReject))
 		return
